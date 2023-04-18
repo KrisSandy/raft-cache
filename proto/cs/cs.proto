@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "example.com/raft-cache/cs";
+
+package cs;
+
+service CacheService {
+    rpc Put(PutRequest) returns (PutResponse) {}
+}
+
+message PutRequest {
+    string key = 1;
+    string value = 2;
+}
+
+message PutResponse {
+    bool success = 1;
+}

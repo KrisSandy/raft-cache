@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: raft-cache
+  labels:
+    app: raft-cache
+spec:
+  ports:
+    - port: 50051
+      name: raft
+  clusterIP: None
+  selector:
+    app: raft-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp
+  labels:
+    app: myapp
+spec:
+  ports:
+    - port: 8000
+      name: http
+  selector:
+    app: raft-cache
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: raft-cache
+spec:
+  selector:
+    matchLabels:
+      app: raft-cache
+  serviceName: raft-cache
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: raft-cache
+    spec:
+      containers:
+        - name: raft-cache
+          image: krissandy/raft-cache-app:latest
+          imagePullPolicy: Always
+          env:
+            - name: RAFT_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RAFT_ADDR
+              value: "$(RAFT_ID).raft-cache.default.svc.cluster.local:50051"
+            - name: RAFT_DATA_DIR
+              value: /usr/share/raft-cache
+          ports:
+            - containerPort: 50051
+              name: raft
+            - containerPort: 8000
+              name: http
+          volumeMounts:
+            - name: cache
+              mountPath: /usr/share/raft-cache
+          # lifecycle:
+          #   postStart:
+          #     exec:
+          #       command: ["./raftctl ad]
+  volumeClaimTemplates:
+    - metadata:
+        name: cache
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
