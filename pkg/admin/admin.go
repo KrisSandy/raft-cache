@@ -13,11 +13,12 @@ import (
 
 type cacheAdminServer struct {
 	ca.UnimplementedCacheAdminServer
-	r *raft.Raft
+	r      *raft.Raft
+	voters map[string]struct{}
 }
 
-func Register(s *grpc.Server, r *raft.Raft) {
-	ca.RegisterCacheAdminServer(s, &cacheAdminServer{r: r})
+func Register(s *grpc.Server, r *raft.Raft, voters map[string]struct{}) {
+	ca.RegisterCacheAdminServer(s, &cacheAdminServer{r: r, voters: voters})
 }
 
 func (s *cacheAdminServer) GetLeader(ctx context.Context, req *ca.LeaderRequest) (*ca.LeaderResponse, error) {
@@ -75,6 +76,31 @@ func (s *cacheAdminServer) GetState(ctx context.Context, req *ca.StateRequest) (
 	return &ca.StateResponse{
 		State: stateStr,
 	}, nil
+}
+
+func (s *cacheAdminServer) Join(ctx context.Context, req *ca.JoinRequest) (*ca.JoinResponse, error) {
+	if _, ok := s.voters[req.Id]; ok {
+		f := s.r.AddVoter(raft.ServerID(req.Id), raft.ServerAddress(req.Address), 0, time.Second)
+
+		if err := f.Error(); err != nil {
+			return nil, err
+		}
+
+		return &ca.JoinResponse{
+			Index: f.Index(),
+			State: "voter",
+		}, nil
+	} else {
+		f := s.r.AddNonvoter(raft.ServerID(req.Id), raft.ServerAddress(req.Address), 0, time.Second)
+		if err := f.Error(); err != nil {
+			return nil, err
+		}
+
+		return &ca.JoinResponse{
+			Index: f.Index(),
+			State: "non-voter",
+		}, nil
+	}
 }
 
 func (s *cacheAdminServer) AddVoter(ctx context.Context, req *ca.AddVoterRequest) (*ca.AddVoterResponse, error) {

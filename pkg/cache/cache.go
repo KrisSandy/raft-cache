@@ -23,39 +23,41 @@ import (
 )
 
 type Cache interface {
-	Get(key string) (string, bool)
-	Put(key, value string) error
+	Get(bucket string, key string) (string, bool)
+	Put(bucket string, key string, value string) error
+	CreateBucket(bucket string) error
 }
 
 type cacheNode struct {
-	r       *raft.Raft
-	c       *cache
-	id      string
-	address string
+	r      *raft.Raft
+	c      *fsm
+	voters map[string]struct{}
 }
 
-func NewCacheNode(raftID string, raftAddr string, raftDataDir string, bootstrap bool, peers []string) (Cache, error) {
-	c := newCache()
+func NewCacheNode(raftID string, raftAddr string, raftDataDir string, bootstrap bool, voters map[string]struct{}) (Cache, error) {
+	c, err := newFSM(raftDataDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new FSM: %v", err)
+	}
 
 	if !bootstrap {
 		bootstrap = checkForAutomaticBootstrap(raftID, raftDataDir)
 	}
 
-	r, tm, err := newRaftNode(raftID, raftAddr, raftDataDir, bootstrap, c, peers)
+	r, tm, err := newRaftNode(raftID, raftAddr, raftDataDir, bootstrap, c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new raft node: %v", err)
 	}
 
 	cn := &cacheNode{
-		r:       r,
-		c:       c,
-		id:      raftID,
-		address: raftAddr,
+		r:      r,
+		c:      c,
+		voters: voters,
 	}
 
 	s := grpc.NewServer()
 	tm.Register(s)
-	admin.Register(s, r)
+	admin.Register(s, r, cn.voters)
 
 	cs.RegisterCacheServiceServer(s, &cacheServer{c: cn})
 
@@ -78,7 +80,7 @@ func NewCacheNode(raftID string, raftAddr string, raftDataDir string, bootstrap 
 	return cn, nil
 }
 
-func newRaftNode(raftID string, raftAddr string, raftDataDir string, bootstrap bool, fsm raft.FSM, peers []string) (*raft.Raft, *transport.Manager, error) {
+func newRaftNode(raftID string, raftAddr string, raftDataDir string, bootstrap bool, fsm raft.FSM) (*raft.Raft, *transport.Manager, error) {
 	// Create a log store and stable store.
 	logStore, err := raftboltdb.NewBoltStore(filepath.Join(raftDataDir, "logs.dat"))
 	if err != nil {
@@ -134,14 +136,12 @@ func checkForAutomaticBootstrap(id string, raftDataDir string) bool {
 	return strings.HasSuffix(id, "-0") && os.IsNotExist(err)
 }
 
-func (c *cacheNode) Get(key string) (string, bool) {
-	c.c.mtx.RLock()
-	defer c.c.mtx.RUnlock()
-	value, ok := c.c.items[key]
+func (c *cacheNode) Get(bucket string, key string) (string, bool) {
+	value, ok := c.c.Get(bucket, key)
 	return value, ok
 }
 
-func (c *cacheNode) Put(key, value string) error {
+func (c *cacheNode) Put(bucket string, key string, value string) error {
 	if c.r.State() != raft.Leader {
 		log.Println("Not leader, forwarding request to leader")
 		//get leader address
@@ -155,8 +155,9 @@ func (c *cacheNode) Put(key, value string) error {
 		client := cs.NewCacheServiceClient(conn)
 
 		_, err = client.Put(context.Background(), &cs.PutRequest{
-			Key:   key,
-			Value: value,
+			Bucket: bucket,
+			Key:    key,
+			Value:  value,
 		})
 		if err != nil {
 			return fmt.Errorf("error forwarding request to leader: %v", err)
@@ -166,9 +167,10 @@ func (c *cacheNode) Put(key, value string) error {
 	}
 
 	cCmd := command{
-		Op:    OpSet,
-		Key:   key,
-		Value: value,
+		Op:     OpSet,
+		Bucket: bucket,
+		Key:    key,
+		Value:  value,
 	}
 
 	var buf bytes.Buffer
@@ -178,7 +180,47 @@ func (c *cacheNode) Put(key, value string) error {
 
 	f := c.r.Apply(buf.Bytes(), time.Second)
 	if err := f.Error(); err != nil {
-		return fmt.Errorf("%s: error applying command to Raft log: %v", c.id, err)
+		return fmt.Errorf("error applying command to Raft log: %v", err)
+	}
+	return nil
+}
+
+func (c *cacheNode) CreateBucket(bucket string) error {
+	if c.r.State() != raft.Leader {
+		log.Println("Not leader, forwarding request to leader")
+		//get leader address
+		leader := c.r.Leader()
+
+		conn, err := grpc.Dial(string(leader), grpc.WithInsecure())
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		client := cs.NewCacheServiceClient(conn)
+
+		_, err = client.CreateBucket(context.Background(), &cs.CreateBucketRequest{
+			Bucket: bucket,
+		})
+		if err != nil {
+			return fmt.Errorf("error forwarding request to leader: %v", err)
+		}
+
+		return nil
+	}
+
+	cCmd := command{
+		Op:     OpCreateBucket,
+		Bucket: bucket,
+	}
+
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(&cCmd); err != nil {
+		return fmt.Errorf("error encoding key, value: %v", err)
+	}
+
+	f := c.r.Apply(buf.Bytes(), time.Second)
+	if err := f.Error(); err != nil {
+		return fmt.Errorf("error applying command to Raft log: %v", err)
 	}
 	return nil
 }

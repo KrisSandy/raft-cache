@@ -26,6 +26,7 @@ const (
 	CacheAdmin_AddNonVoter_FullMethodName      = "/ca.CacheAdmin/AddNonVoter"
 	CacheAdmin_RemovePeer_FullMethodName       = "/ca.CacheAdmin/RemovePeer"
 	CacheAdmin_PromotePeer_FullMethodName      = "/ca.CacheAdmin/PromotePeer"
+	CacheAdmin_Join_FullMethodName             = "/ca.CacheAdmin/Join"
 )
 
 // CacheAdminClient is the client API for CacheAdmin service.
@@ -39,6 +40,7 @@ type CacheAdminClient interface {
 	AddNonVoter(ctx context.Context, in *AddNonVoterRequest, opts ...grpc.CallOption) (*AddNonVoterResponse, error)
 	RemovePeer(ctx context.Context, in *RemovePeerRequest, opts ...grpc.CallOption) (*RemovePeerResponse, error)
 	PromotePeer(ctx context.Context, in *PromotePeerRequest, opts ...grpc.CallOption) (*PromotePeerResponse, error)
+	Join(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error)
 }
 
 type cacheAdminClient struct {
@@ -112,6 +114,15 @@ func (c *cacheAdminClient) PromotePeer(ctx context.Context, in *PromotePeerReque
 	return out, nil
 }
 
+func (c *cacheAdminClient) Join(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error) {
+	out := new(JoinResponse)
+	err := c.cc.Invoke(ctx, CacheAdmin_Join_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CacheAdminServer is the server API for CacheAdmin service.
 // All implementations must embed UnimplementedCacheAdminServer
 // for forward compatibility
@@ -123,6 +134,7 @@ type CacheAdminServer interface {
 	AddNonVoter(context.Context, *AddNonVoterRequest) (*AddNonVoterResponse, error)
 	RemovePeer(context.Context, *RemovePeerRequest) (*RemovePeerResponse, error)
 	PromotePeer(context.Context, *PromotePeerRequest) (*PromotePeerResponse, error)
+	Join(context.Context, *JoinRequest) (*JoinResponse, error)
 	mustEmbedUnimplementedCacheAdminServer()
 }
 
@@ -150,6 +162,9 @@ func (UnimplementedCacheAdminServer) RemovePeer(context.Context, *RemovePeerRequ
 }
 func (UnimplementedCacheAdminServer) PromotePeer(context.Context, *PromotePeerRequest) (*PromotePeerResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PromotePeer not implemented")
+}
+func (UnimplementedCacheAdminServer) Join(context.Context, *JoinRequest) (*JoinResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Join not implemented")
 }
 func (UnimplementedCacheAdminServer) mustEmbedUnimplementedCacheAdminServer() {}
 
@@ -290,6 +305,24 @@ func _CacheAdmin_PromotePeer_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CacheAdmin_Join_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CacheAdminServer).Join(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CacheAdmin_Join_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CacheAdminServer).Join(ctx, req.(*JoinRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CacheAdmin_ServiceDesc is the grpc.ServiceDesc for CacheAdmin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -324,6 +357,10 @@ var CacheAdmin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PromotePeer",
 			Handler:    _CacheAdmin_PromotePeer_Handler,
+		},
+		{
+			MethodName: "Join",
+			Handler:    _CacheAdmin_Join_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

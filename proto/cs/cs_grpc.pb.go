@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	CacheService_Put_FullMethodName = "/cs.CacheService/Put"
+	CacheService_Put_FullMethodName          = "/cs.CacheService/Put"
+	CacheService_CreateBucket_FullMethodName = "/cs.CacheService/CreateBucket"
 )
 
 // CacheServiceClient is the client API for CacheService service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CacheServiceClient interface {
 	Put(ctx context.Context, in *PutRequest, opts ...grpc.CallOption) (*PutResponse, error)
+	CreateBucket(ctx context.Context, in *CreateBucketRequest, opts ...grpc.CallOption) (*CreateBucketResponse, error)
 }
 
 type cacheServiceClient struct {
@@ -46,11 +48,21 @@ func (c *cacheServiceClient) Put(ctx context.Context, in *PutRequest, opts ...gr
 	return out, nil
 }
 
+func (c *cacheServiceClient) CreateBucket(ctx context.Context, in *CreateBucketRequest, opts ...grpc.CallOption) (*CreateBucketResponse, error) {
+	out := new(CreateBucketResponse)
+	err := c.cc.Invoke(ctx, CacheService_CreateBucket_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CacheServiceServer is the server API for CacheService service.
 // All implementations must embed UnimplementedCacheServiceServer
 // for forward compatibility
 type CacheServiceServer interface {
 	Put(context.Context, *PutRequest) (*PutResponse, error)
+	CreateBucket(context.Context, *CreateBucketRequest) (*CreateBucketResponse, error)
 	mustEmbedUnimplementedCacheServiceServer()
 }
 
@@ -60,6 +72,9 @@ type UnimplementedCacheServiceServer struct {
 
 func (UnimplementedCacheServiceServer) Put(context.Context, *PutRequest) (*PutResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Put not implemented")
+}
+func (UnimplementedCacheServiceServer) CreateBucket(context.Context, *CreateBucketRequest) (*CreateBucketResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateBucket not implemented")
 }
 func (UnimplementedCacheServiceServer) mustEmbedUnimplementedCacheServiceServer() {}
 
@@ -92,6 +107,24 @@ func _CacheService_Put_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CacheService_CreateBucket_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateBucketRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CacheServiceServer).CreateBucket(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CacheService_CreateBucket_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CacheServiceServer).CreateBucket(ctx, req.(*CreateBucketRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CacheService_ServiceDesc is the grpc.ServiceDesc for CacheService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -102,6 +135,10 @@ var CacheService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Put",
 			Handler:    _CacheService_Put_Handler,
+		},
+		{
+			MethodName: "CreateBucket",
+			Handler:    _CacheService_CreateBucket_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

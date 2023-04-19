@@ -53,6 +53,8 @@ spec:
               value: "$(RAFT_ID).raft-cache.default.svc.cluster.local:50051"
             - name: RAFT_DATA_DIR
               value: /usr/share/raft-cache
+            - name: RAFT_VOTERS
+              value: "raft-cache-0,raft-cache-1,raft-cache-2"
           ports:
             - containerPort: 50051
               name: raft
@@ -61,10 +63,15 @@ spec:
           volumeMounts:
             - name: cache
               mountPath: /usr/share/raft-cache
-          # lifecycle:
-          #   postStart:
-          #     exec:
-          #       command: ["./raftctl ad]
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  [
+                    "/bin/sh",
+                    "-c",
+                    "raftctl join --leader=raft-cache-0.raft-cache.default.svc.cluster.local:50051",
+                  ]
   volumeClaimTemplates:
     - metadata:
         name: cache

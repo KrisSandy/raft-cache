@@ -32,6 +32,9 @@ func main() {
 		"remove-peer": func() (cli.Command, error) {
 			return raftcli.NewRemovePeerCommand(), nil
 		},
+		"join": func() (cli.Command, error) {
+			return raftcli.NewJoinCommand(), nil
+		},
 	}
 
 	exitStatus, err := c.Run()

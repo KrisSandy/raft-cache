@@ -6,13 +6,23 @@ package cs;
 
 service CacheService {
     rpc Put(PutRequest) returns (PutResponse) {}
+    rpc CreateBucket(CreateBucketRequest) returns (CreateBucketResponse) {}
 }
 
 message PutRequest {
-    string key = 1;
-    string value = 2;
+    string bucket = 1;
+    string key = 2;
+    string value = 3;
 }
 
 message PutResponse {
+    bool success = 1;
+}
+
+message CreateBucketRequest {
+    string bucket = 1;
+}
+
+message CreateBucketResponse {
     bool success = 1;
 }

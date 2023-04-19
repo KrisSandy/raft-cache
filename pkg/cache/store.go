@@ -1,97 +1,109 @@
 package cache
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
 	"io"
-	"log"
+	"os"
+	"path/filepath"
 	"sync"
 
-	"github.com/hashicorp/raft"
-	"golang.org/x/exp/maps"
+	bolt "go.etcd.io/bbolt"
 )
 
-const (
-	OpSet Operation = iota
-	OpDelete
-)
-
-type cache struct {
-	mtx   sync.RWMutex
-	items map[string]string
+type store interface {
+	Get(bucket string, key string) (string, bool)
+	Put(bucket string, key string, value string) error
+	CreateBucket(name string) error
+	Close() error
+	GetDBPath() string
+	Restore(rc io.ReadCloser) error
 }
 
-type Operation int
+type storeDB struct {
+	db   *bolt.DB
+	path string
 
-type command struct {
-	Op    Operation
-	Key   string
-	Value string
+	mtx sync.RWMutex
 }
 
-var _ raft.FSM = (*cache)(nil)
-
-func newCache() *cache {
-	return &cache{
-		items: make(map[string]string),
-	}
-}
-
-func (c *cache) Get(key string) (string, bool) {
-	c.mtx.RLock()
-	defer c.mtx.RUnlock()
-	value, ok := c.items[key]
-	return value, ok
-}
-
-func (c *cache) Apply(l *raft.Log) interface{} {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-	data := bytes.NewBuffer(l.Data)
-	var cmd command
-	if err := gob.NewDecoder(data).Decode(&cmd); err != nil {
-		log.Println("failed to decode command")
-		return fmt.Errorf("failed to decode command: %v", err)
+func newStore(path string) (store, error) {
+	db, err := bolt.Open(filepath.Join(path, DBName), 0600, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open cache db: %v", err)
 	}
 
-	log.Println("Applying command to cache: %w", cmd)
-
-	switch cmd.Op {
-	case OpSet:
-		log.Printf("setting %q to %q", cmd.Key, cmd.Value)
-		c.items[cmd.Key] = cmd.Value
-	case OpDelete:
-		log.Printf("deleting %q", cmd.Key)
-		delete(c.items, cmd.Key)
-	default:
-		return fmt.Errorf("unknown command: %v", cmd.Op)
-	}
-
-	return nil
-}
-
-func (c *cache) Snapshot() (raft.FSMSnapshot, error) {
-	return &cacheSnapshot{
-		items: copyMap(c.items),
+	return &storeDB{
+		db:   db,
+		path: path,
 	}, nil
 }
 
-func (c *cache) Restore(rc io.ReadCloser) error {
-	dec := gob.NewDecoder(rc)
-	defer rc.Close()
+func (s *storeDB) Get(bucket string, key string) (string, bool) {
+	var v []byte
 
-	var items map[string]string
-	if err := dec.Decode(&items); err != nil {
-		return fmt.Errorf("failed to decode items: %v", err)
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucket))
+		v = b.Get([]byte(key))
+		return nil
+	})
+
+	if v == nil {
+		return "", false
 	}
 
-	c.items = items
+	return string(v), true
+}
+
+func (s *storeDB) Put(bucket string, key string, value string) error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucket))
+		err := b.Put([]byte(key), []byte(value))
+		return err
+	})
+
 	return nil
 }
 
-func copyMap(m map[string]string) map[string]string {
-	n := make(map[string]string, len(m))
-	maps.Copy(n, m)
-	return n
+func (s *storeDB) CreateBucket(name string) error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucket([]byte(name))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	return nil
+}
+
+func (s *storeDB) Close() error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.db.Close()
+}
+
+func (s *storeDB) GetDBPath() string {
+	return s.path
+}
+
+func (s *storeDB) Restore(rc io.ReadCloser) error {
+	bytes, err := io.ReadAll(rc)
+	if err != nil {
+		return fmt.Errorf("failed to read snapshot: %v", err)
+	}
+
+	if err = os.WriteFile(filepath.Join(s.GetDBPath(), DBName), bytes, 0644); err != nil {
+		return fmt.Errorf("failed to write snapshot: %v", err)
+	}
+
+	return nil
 }

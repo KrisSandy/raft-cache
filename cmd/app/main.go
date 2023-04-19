@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"example.com/raft-cache/pkg/config"
 
@@ -19,21 +18,15 @@ func main() {
 		log.Fatalf("Error creating new config: %v", err)
 	}
 
-	peersStr := os.Getenv("RAFT_PEERS")
-	var peers []string
-	if peersStr != "" {
-		peers = strings.Split(peersStr, ",")
-	}
-
-	log.Printf("Starting node %s at %s", config.RaftID, config.RaftAddr)
-	c, err := cache.NewCacheNode(config.RaftID, config.RaftAddr, config.RaftDataDir, config.RaftBootstrap, peers)
+	log.Printf("Starting cache node %s at %s", config.RaftID, config.RaftAddr)
+	c, err := cache.NewCacheNode(config.RaftID, config.RaftAddr, config.RaftDataDir, config.RaftBootstrap, config.RaftVoters)
 	if err != nil {
 		log.Fatalf("Error creating new raft node: %v", err)
 	}
 
 	server := newServer(c)
-	log.Printf("Starting server at %s", config.SvrPort)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", config.SvrPort), server.handler))
+	log.Printf("Starting server at %s", config.ServicePort)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", config.ServicePort), server.handler))
 }
 
 func RemoveContents(dir string) error {

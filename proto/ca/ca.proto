@@ -12,6 +12,7 @@ service CacheAdmin {
     rpc AddNonVoter(AddNonVoterRequest) returns (AddNonVoterResponse) {}
     rpc RemovePeer(RemovePeerRequest) returns (RemovePeerResponse) {}
     rpc PromotePeer(PromotePeerRequest) returns (PromotePeerResponse) {}
+    rpc Join(JoinRequest) returns (JoinResponse) {}
 }
 
 message LeaderRequest {
@@ -79,5 +80,16 @@ message StateResponse {
 message Server {
     string id = 1;
     string address = 2;
+    string state = 3;
+}
+
+message JoinRequest {
+    string id = 1;
+    string address = 2;
+    uint64 previous_index = 3;
+}
+
+message JoinResponse {
+    uint64 index = 1;
     string state = 3;
 }

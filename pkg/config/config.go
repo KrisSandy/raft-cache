@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -11,7 +12,8 @@ type Config struct {
 	RaftAddr      string
 	RaftDataDir   string
 	RaftBootstrap bool
-	SvrPort       string
+	RaftVoters    map[string]struct{}
+	ServicePort   string
 }
 
 func NewConfig() (*Config, error) {
@@ -19,6 +21,7 @@ func NewConfig() (*Config, error) {
 	raftAddr := flag.String("raft-addr", os.Getenv("RAFT_ADDR"), "address of the raft node")
 	raftDataDir := flag.String("raft-data-dir", os.Getenv("RAFT_DATA_DIR"), "raft data directory")
 	raftBootstrap := flag.Bool("raft-bootstrap", false, "bootstrap the raft cluster")
+	raftVoters := flag.String("raft-voters", os.Getenv("RAFT_VOTERS"), "comma separated list of raft peers")
 	svrPort := flag.String("svr-port", "8000", "address of the server")
 
 	flag.Parse()
@@ -35,11 +38,20 @@ func NewConfig() (*Config, error) {
 		return nil, fmt.Errorf("RAFT_DATA_DIR is required")
 	}
 
+	voters := make(map[string]struct{})
+	if *raftVoters != "" {
+		vs := strings.Split(*raftVoters, ",")
+		for _, v := range vs {
+			voters[v] = struct{}{}
+		}
+	}
+
 	return &Config{
 		RaftID:        *raftId,
 		RaftAddr:      *raftAddr,
 		RaftDataDir:   *raftDataDir,
 		RaftBootstrap: *raftBootstrap,
-		SvrPort:       *svrPort,
+		RaftVoters:    voters,
+		ServicePort:   *svrPort,
 	}, nil
 }
